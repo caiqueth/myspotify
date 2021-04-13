@@ -30,7 +30,7 @@ require('extrafont')
 
 
 # Reads the data from json
-dataFolder <- 'MyData'
+dataFolder <- 'myData'
 jsonFiles <- list.files(dataFolder, pattern = '\\.json$', full.names = TRUE)
 
 myData <- lapply(jsonFiles, fromJSON, flatten = TRUE)

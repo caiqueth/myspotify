@@ -14,3 +14,9 @@ Rstudio is required to knit the .Rmd file.
 A file "main.html" will be created with your report
 
 Go crazy.
+
+Examples:
+
+![Time listened per day](/examples/listened_day.png)
+![Time listened per week](/examples/listened_week.png)
+![Time listened per month](/examples/listened_month.png)
