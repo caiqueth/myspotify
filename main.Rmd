@@ -1,0 +1,164 @@
+---
+output:
+  html_document: default
+---
+
+``` {r setup, echo=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 10, fig.height = 5,
+                      dev.args = list(png = list(type = "cairo")))
+```
+# Spotify
+
+Personal Spotify usage report
+
+
+``` {css echo=FALSE, message=FALSE, warning=FALSE}
+body {
+  background-color: #121212;
+  color: white;
+  font-family: Montserrat, Arial, sans-serif;
+}
+```
+
+``` {r echo=FALSE, message=FALSE, warning=FALSE}
+require('ggplot2')
+require('data.table')
+require('jsonlite')
+
+# Better visualized if you have Montserrat font installed
+require('extrafont')
+
+
+# Reads the data from json
+dataFolder <- 'MyData'
+jsonFiles <- list.files(dataFolder, pattern = '\\.json$', full.names = TRUE)
+
+myData <- lapply(jsonFiles, fromJSON, flatten = TRUE)
+names(myData) <- gsub('MyData\\/|\\.json', '', jsonFiles)
+
+# Converts the lists to data.table
+dfToDt <- function(list) {
+  for (e in list) {
+    if (class(e) == 'data.frame') {
+      setDT(e)
+    } else if (class(e) == 'list') {
+      dfToDt(e)
+    }
+  }
+}
+dfToDt(myData)
+history <- rbindlist(myData[grepl('^StreamingHistory[0-9+]$', names(myData))])
+
+# Categorize data (songs x podcasts)
+podcasts <- myData$YourLibrary$shows[, unique(name)]
+history[, tipo := 'Artist']
+history[artistName %chin% podcasts, tipo := 'Podcast']
+
+# Time aux variables
+history[, date := as.Date(endTime, format = '%Y-%m-%d %H:%M')]
+history[, week := paste(strftime(date, format = '%Y'),
+                        strftime(date, format = '%V'),
+                        sep = '-')]
+history[, month := strftime(date, format = '%Y-%m')]
+history[, minutesPlayed := msPlayed / 60 / 1e3]
+history[, hoursPlayed := msPlayed / 60 / 60 / 1e3]
+
+# Removes unwanted podcast statistics
+history <- history[tipo != 'Podcast']
+
+# Aggregations
+historyBySong   <- history[, .(minutesPlayed = sum(minutesPlayed)), by = .(tipo, artistName, trackName)]
+historyByArtist <- history[, .(minutesPlayed = sum(minutesPlayed)), by = .(tipo, artistName)]
+historyByWeek   <- history[, .(hoursPlayed   = sum(hoursPlayed)),   by = .(week)]
+historyByMonth  <- history[, .(hoursPlayed   = sum(hoursPlayed)),   by = .(month)]
+historyByDate   <- history[, .(minutesPlayed = sum(minutesPlayed)), by = .(date)]
+
+# Set ordering to help factoring names
+setorder(historyByArtist, -minutesPlayed)
+setorder(historyBySong, -minutesPlayed)
+
+# Convert characters to factors (helpful with ggplot)
+historyByArtist[, artistName := factor(artistName, levels = unique(artistName))]
+historyBySong[, trackName := factor(trackName, levels = unique(trackName))]
+
+# Spotify inspired theme for the plots
+theme_spotify <- function() {
+  black <- '#121212'
+  gray  <- '#282828'
+  white <- '#ffffff'
+  green <- '#1db954'
+  theme(
+    text = element_text(family = 'Arial'),
+    plot.background = element_rect(fill = black, colour = black),
+    panel.background = element_rect(fill = black),
+    panel.grid.major = element_line(color = gray),
+    panel.grid.minor = element_line(color = gray),
+    axis.title = element_text(colour = white),
+    axis.text = element_text(colour = white),
+    axis.text.x = element_text(angle = 45, hjust=1),
+    title = element_text(family = 'Montserrat', colour = white, face = 'bold'),
+    axis.title.y = element_text(colour = white, face = 'plain'),
+    axis.title.x = element_text(colour = white, face = 'plain')
+  )
+}
+```
+
+``` {r echo=FALSE}
+p1 <- ggplot(historyByDate, aes(x = date, y = minutesPlayed)) +
+  geom_bar(position = 'stack',
+           stat = 'identity',
+           fill = '#1db954') +
+  ggtitle('Time listened of Spotify per day') +
+  xlab(element_blank()) + ylab('Minutes') +
+  theme_spotify()
+p1
+```
+
+
+``` {r echo=FALSE}
+customAxis <- historyByWeek[, ifelse(week %in% week[seq(1, length(week), 10)], week, '')]
+p2 <- ggplot(historyByWeek, aes(x = week, y = hoursPlayed)) +
+  geom_bar(position = 'stack',
+           stat = 'identity',
+           fill = '#1db954') +
+  ggtitle('Time listened of Spotify per week') +
+  xlab(element_blank()) + ylab('Hours') +
+  theme_spotify() +
+  scale_x_discrete(labels = customAxis)
+p2
+```
+
+``` {r echo=FALSE}
+p3 <- ggplot(historyByMonth, aes(x = month, y = hoursPlayed)) +
+  geom_bar(position = 'stack',
+           stat = 'identity',
+           fill = '#1db954') +
+  ggtitle('Time listened of Spotify per month') +
+  xlab(element_blank()) + ylab('Hours') +
+  theme_spotify()
+p3
+```
+
+``` {r echo=FALSE}
+p4 <- ggplot(historyByArtist[order(-minutesPlayed)][1:20],
+             aes(x = artistName, y = minutesPlayed)) +
+  geom_bar(position = 'stack',
+           stat = 'identity',
+           fill = '#1db954') +
+  ggtitle('Top 20 artists in the period') +
+  xlab(element_blank()) + ylab('Minutes') +
+  theme_spotify()
+p4
+```
+
+``` {r echo=FALSE}
+p5 <- ggplot(historyBySong[order(-minutesPlayed)][1:20],
+             aes(x = trackName, y = minutesPlayed)) +
+  geom_bar(position = 'stack',
+           stat = 'identity',
+           fill = '#1db954') +
+  ggtitle('Top 20 songs in the period') +
+  xlab(element_blank()) + ylab('Minutes') +
+  theme_spotify()
+p5
+```
